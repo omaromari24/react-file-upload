@@ -27,27 +27,51 @@ export default class UploadFiles extends Component {
 
   selectFile(event) {
     this.setState({
+      progressInfos: [],
       selectedFiles: event.target.files,
     });
   }
 
-  upload() {
-    let currentFile = this.state.selectedFiles[0];
+  uploadFiles() {
+    const selectedFiles = this.state.selectedFiles;
 
-    this.setState({
-      progress: 0,
-      currentFile: currentFile,
-    });
+    let _progressInfos = [];
 
-    UploadService.upload(currentFile, (event) => {
+    for (let i = 0; i < selectedFiles.length; i++) {
+      _progressInfos.push({ percentage: 0, fileName: selectedFiles[i].name });
+    }
+
+    this.setState(
+      {
+        progressInfos: _progressInfos,
+        message: [],
+      },
+      () => {
+        for (let i = 0; i < selectedFiles.length; i++) {
+          this.upload(i, selectedFiles[i]);
+        }
+      }
+    );
+  }
+
+
+  upload(idx, file) {
+    let _progressInfos = [...this.state.progressInfos];
+
+    UploadService.upload(file, (event) => {
+      _progressInfos[idx].percentage = Math.round((100 * event.loaded) / event.total);
       this.setState({
-        progress: Math.round((100 * event.loaded) / event.total),
+        _progressInfos,
       });
     })
       .then((response) => {
-        this.setState({
-          message: response.data.message,
+        this.setState((prev) => {
+          let nextMessage = [...prev.message, "Uploaded the file successfully: " + file.name];
+          return {
+            message: nextMessage
+          };
         });
+
         return UploadService.getFiles();
       })
       .then((files) => {
@@ -56,59 +80,68 @@ export default class UploadFiles extends Component {
         });
       })
       .catch(() => {
-        this.setState({
-          progress: 0,
-          message: "Could not upload the file!",
-          currentFile: undefined,
+        _progressInfos[idx].percentage = 0;
+        this.setState((prev) => {
+          let nextMessage = [...prev.message, "Could not upload the file: " + file.name];
+          return {
+            progressInfos: _progressInfos,
+            message: nextMessage
+          };
         });
       });
-
-    this.setState({
-      selectedFiles: undefined,
-    });
   }
 
   render() {
-    const {
-      selectedFiles,
-      currentFile,
-      progress,
-      message,
-      fileInfos,
-    } = this.state;
+    const { selectedFiles, progressInfos, message, fileInfos } = this.state;
 
     return (
       <div>
-        {currentFile && (
-          <div className="progress">
-            <div
-              className="progress-bar progress-bar-info progress-bar-striped"
-              role="progressbar"
-              aria-valuenow={progress}
-              aria-valuemin="0"
-              aria-valuemax="100"
-              style={{ width: progress + "%" }}
-            >
-              {progress}%
+        {progressInfos &&
+          progressInfos.map((progressInfo, index) => (
+            <div className="mb-2" key={index}>
+              <span>{progressInfo.fileName}</span>
+              <div className="progress">
+                <div
+                  className="progress-bar progress-bar-info"
+                  role="progressbar"
+                  aria-valuenow={progressInfo.percentage}
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  style={{ width: progressInfo.percentage + "%" }}
+                >
+                  {progressInfo.percentage}%
+                </div>
+              </div>
             </div>
+          ))}
+
+        <div className="row my-3">
+          <div className="col-8">
+            <label className="btn btn-default p-0">
+              <input type="file" multiple onChange={this.selectFiles} />
+            </label>
+          </div>
+
+          <div className="col-4">
+            <button
+              className="btn btn-success btn-sm"
+              disabled={!selectedFiles}
+              onClick={this.uploadFiles}
+            >
+              Upload
+            </button>
+          </div>
+        </div>
+
+        {message.length > 0 && (
+          <div className="alert alert-secondary" role="alert">
+            <ul>
+              {message.map((item, i) => {
+                return <li key={i}>{item}</li>;
+              })}
+            </ul>
           </div>
         )}
-
-        <label className="btn btn-default">
-          <input type="file" onChange={this.selectFile} />
-        </label>
-
-        <button
-          className="btn btn-success"
-          disabled={!selectedFiles}
-          onClick={this.upload}
-        >
-          Upload
-        </button>
-
-        <div className="alert alert-light" role="alert">
-          {message}
-        </div>
 
         <div className="card">
           <div className="card-header">List of Files</div>
